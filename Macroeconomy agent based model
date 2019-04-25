@@ -1,0 +1,1046 @@
+globals [
+  Free-Interest-Rate
+  GDP
+  Unemployment                                                ; sum of the households without a job
+  Consumption                                                 ; sum of goods sold by the consumptions firms
+  Total-Investment                                            ; sum of total capital sold by the capital production firms
+  Goods-Price-Level                                           ; sum (price * qt) / Qt sold
+  Goods-Price-Level_t-1
+  Capital-Price-Level                                         ; sum (price * qt) / Qt sold
+  Capital-Price-Level_t-1
+  Total-Loans                                                 ; sum of loans
+  Total-Loans-C-Firms                                         ; sum of loans with the C-Firms
+  Total-Loans-K-Firms                                         ; sum of loans with the K-Firms
+  C-Firms                                                     ; group of firms with property consumption production
+  K-Firms                                                     ; group of firms with property capital production
+  Workers                                                     ; group of households with property worker
+  Capitalists                                                 ; group of households with property capitalist
+  Retail-Banks                                                ; group of banks with property retail
+  Wholesale-Banks                                             ; group of banks with property wholeseler
+  C-Broke                                                     ; sum of Consumption firms that went broke last period
+  K-Broke                                                     ; sum of capital production firms that went broke last period
+  Matrix-C-Firms-Bankruptcy                                   ; input with information that will be used in calculation into R
+  Matrix-K-Firms-Bankruptcy                                   ;input with information that will be used in calculation into R
+  Beta_1-C-Firms                                              ; parameter utilized by the banks to calculate the interest rate for the firms
+  Beta_2-C-Firms                                              ; parameter utilized by the banks to calculate the interest rate for the firms
+  Beta_1-K-Firms                                              ; parameter utilized by the banks to calculate the interest rate for the firms
+  Beta_2-K-Firms                                              ; parameter utilized by the banks to calculate the interest rate for the firms
+  Mi
+  Mj
+  Mjk
+  ]
+
+breed               [Households Household]                    ; agent class
+breed               [Firms      Firm     ]                    ; agent class
+breed               [Banks      Bank     ]                    ; agent class
+directed-link-breed [Hireds     Hired    ]                    ; link used to link firms to the worker
+directed-link-breed [Owners     Owner    ]                    ; link used to link firms to their owner/capitalist
+
+Households-own [
+  Worker?                                                     ; property of the household, yes if it is a worker, not if it is a capitalis
+  Human-Wealth                                                ; parameter to calibrate how much of the intire wealth will be use for consumption
+  Current-Income                                              ; the salary if it is a worker, the profit if it is a capitalist
+  Deposit-Bank                                                ; the total of wealth of the households held with the bank
+  Desire-Consume                                              ; theorical value the household want to consume this period
+  Consume                                                     ; real value the household did consume
+  Price-List                                                  ; list with the prices of firms the household visited last period
+  ]
+
+Firms-own [
+  C-Firms?                                                    ; property of the firms, yes if it is a consumption production firm, not if is a capital production firm
+
+  Price                                                       ; last price praticed by the firm
+  Demand                                                      ; last quantity demanded
+  Production                                                  ; actual production of the firm
+  Stock                                                       ; amount availible for sales
+  Delta                                                       ; parameter used to calculate new price
+  Number-Employee                                             ; actual number of employee of this firm
+  Desire-Employee                                             ; ideal number of employee for this firm
+  Vacancy                                                     ; number of opened places at this firm for new workers
+
+  Revenue                                                     ; sum of quantity sold times the price
+  Salles                                                      ; sum of quantity sold last period
+  Profit                                                      ; revenue less the despenses
+  Dividend                                                    ; part of the profit given to the owner
+  Need-Cash                                                   ; money that will be ask at bank as a new loan
+  Bank-Deposit                                                ; money availible at the bank
+  Leverage                                                    ; assets of firm divided by their debts
+  Broke                                                       ; true or false indicator, yes if the firm went broke this period
+  Assets                                                      ; sum deposit at bank and stock availible for sales
+  Current-Retail-Loan                                         ; sum of loans with the retail bank
+  Interest-Retail                                             ; actual interest rate praticed with this firm by the retail bank
+  Current-Wholesale-Loan                                      ; sum of loans with the wholesaler bank
+  Interest-Wholesale                                          ; actual interest rate praticed with this firm by the wholesale bank
+  Retail-Bankruptcy                                           ; the probability to go bankruptcy by this firm, calculated by the retail bank
+  Wholesale-Bankruptcy                                        ; the probability to go bankruptcy by this firm, calculated by the wholesaler bank
+  Interest-Pay                                                ; sum of interest rate payed last period
+  Installment-Pay                                             ; sum of the installment payed last period
+  T-expected                                                  ; the expected life expan for this firm
+
+  Capital                                                     ; property of the C-firms, indicate the capital availible to be used at the production process
+  Desire-Investment                                           ; property of the C-Firms, ideal investiment needed
+  Price-List                                                  ; property of the C-Firms, list of prices from the K-Firms visited last period trying to buy capital goods
+  Investment                                                  ; property of the C-Firms, capital goods bough last period
+  Investment-Memory                                           ; property of the C-firms, parameter utilized to calculate te Desire-Investment
+  Util-Capacity                                               ; property of the C-Firms, indicates how much of the Capital had been used
+
+  Stock-t-1                                                   ; Stock availible in t-1
+
+  ]
+
+Banks-own [
+  Retail-Bank?                                                 ; Banks property, true if it is a retail bank, false it is a wholesaler bank
+  Equity-Workers                                               ; sum of deposit at bank of the households
+  Equity-Capitalists                                           ; sum of deposit at bank of the capitalists
+  Equity-C-Firms                                               ; sum of deposit at bank of the C-Firms
+  Equity-K-Firms                                               ; sum of deposit at bank of the K-Firms
+  Equity-Bank                                                  ; bank own equity
+  Equity-Total                                                 ; sum of all equities
+  Leverage-C-Firms                                             ; mean leverage of the C-Firms, every bank has their number
+  Leverage-K-Firms                                             ; mean leverage of the K-Firms, every bank has their number
+  Interest-Receive                                             ; sum of interest received last period
+  Installment-Receive                                          ; sum of installment received last period
+  Profit                                                       ; sum of interest received less the bank losses with their loans
+  Intrabank-Loan                                               ; loans regestrited between banks
+  Intrabank-rate                                               ; interest rate praticed in the Intrabank-Loan
+
+  ]
+
+;;******************************************************************************XXXXXXXX_SETUP_XXXXXXXX******************************************************************************
+
+to Setup
+  clear-all
+  if Workers?                                       [ Setup-Workers    ]             ; call the setup for workers
+  if C-Firm?                                        [ Setup-C-Firms    ]             ; call the setup for C-Firms
+  if K-Firm?                                        [ Setup-K-Firms    ]             ; call the setup for K-Firms
+  if Capitalist?                                    [ Setup-Capitalist ]             ; call the setup for Capitalists
+  Setup-Globals                                                                      ; call the setup for globals
+  if Bank?                                          [ Setup-Bank       ]             ; call the setup for banks
+  reset-ticks                                                                        ; netlogo needs
+end 
+
+to Setup-Globals
+  set Free-Interest-Rate             natural-interest-rate
+  set GDP                            0                                               ; initial GDP
+  set Unemployment                   0                                               ; initial Unemployment rate
+  set Consumption                    0                                               ; initial value of consumption
+  set Total-Investment               0                                               ; initial value of total investment
+  set Goods-Price-Level              2                                               ; initial goods price level
+  set Capital-Price-Level            2                                               ; initial capital goods price level
+  set Total-Loans                    0                                               ; initial value for total loans loans
+  set Total-Loans-C-Firms            0                                               ; initial value for c-loans
+  set Total-Loans-K-Firms            0                                               ; initial value for K-Loans
+  set C-Firms                        Firms      with [    C-Firms?]                  ; building the group with all C-Firms
+  set K-Firms                        Firms      with [not C-Firms?]                  ; building the group with all K-firms
+  set Capitalists                    Households with [not Worker? ]                  ; building the group with all Capitalist
+  set Workers                        Households with [    Worker? ]                  ; building the group with all workers
+  set Matrix-C-Firms-Bankruptcy      matrix:make-constant  2 Window 0                ; building the initial matrix which will be used by R-Netlogo later
+  set Matrix-K-Firms-Bankruptcy      matrix:make-constant  2 Window 0                ; building the initial matrix which will be used by R-Netlogo late
+  set Mj                             0                                               ; helper with the matrix above
+  set Mjk                            0                                               ; helper with the matrix above
+  if not Random-Seed?               [ random-seed 12345 ]                            ; random seed may or not be used
+end 
+
+to Setup-Workers
+  create-Households Number-of-workers [
+    setxy                            random-xcor random-ycor                         ; the initial position of the worker is random
+    set shape                        "person"                                        ; just for fun, not necessary for the model, used only for display in HUD netlogo
+    set size                         0.50                                            ; just for fun, not necessary for the model, used only for display in HUD netlogo
+    set color                        blue                                            ; just for fun, not necessary for the model, used only for display in HUD netlogo
+    set Worker?                      true                                            ; proper of the household, true indicates it is a worker
+    set Human-Wealth                 1                                               ; initial value for Human Wealth, utilized to calculate the consume process
+    set Current-Income               0                                               ; intitial income
+    set Deposit-Bank                 Initial-households-personal-assets              ; initial value of deposit at bank
+    set Desire-Consume               0                                               ; initial value for desire consume
+    set Consume                      0                                               ; initial value for consume
+    set Price-List                   [ ]                                             ; setup for the list which will be use to colect the price of the C-Firms visited
+    ]
+end 
+
+to Setup-Capitalist
+  ask n-of 250 patches [                                                             ; each patches represent one firm, this command ensure will be one capitalist for each firm
+    sprout-Households 1 [                                                            ; ask to create one capitalist in each position
+      set shape                        "person"                                      ; just for fun, not necessary for the model, used only for display in HUD netlogo
+      set size                         0.50                                          ; just for fun, not necessary for the model, used only for display in HUD netlogo
+      set color                        white                                         ; just for fun, not necessary for the model, used only for display in HUD netlogo
+      set Worker?                      false                                         ; proper of the household, false means it is a capitalist
+      set Human-Wealth                 1                                             ; initial value for human wealth
+      set Current-Income               0                                             ; initial value for current income
+      set Deposit-Bank                 Initial-households-personal-assets            ; initial value for deposit at bank
+      set Desire-Consume               0                                             ; initial value for desire-consume
+      set Consume                      0                                             ; initial value of consume
+      set Price-List                   [ ]                                           ; setup for the list which will be use to colect the price of the C-Firms visited
+      create-Owner-from                one-of Firms-Here [set hidden? true]          ; this create a link between the firm and the capitalist. Thus, one will know eachother for all the porpouse, dividen, rebuild a broken firm, etc.
+      ]
+    ]
+end 
+
+to Setup-C-Firms
+  ask n-of 200 patches with [pycor < 8] [                                             ; this command ask the 200 patches which are position at grid with y coordinates less than 8
+    sprout-Firms 1 [                                                                  ; ask to create one firm at this patche
+      set shape                      "house"                                          ; just for fun, not necessary for the model, used only for display in HUD netlogo
+      set size                       0.75                                             ; just for fun, not necessary for the model, used only for display in HUD netlogo
+      set color                      orange                                           ; just for fun, not necessary for the model, used only for display in HUD netlogo
+      set C-Firms?                   true                                             ; proper of the Firms, true means it is a consumption producer firm
+      set Price                      2                                                ; initial value for price
+      set Capital                    Initial-capital                                  ; initial value for capital
+      set Stock                      Initial-production-C-firms                       ; initial value for stock
+      set Production                 Initial-production-C-firms                       ; initial value for production
+      set Revenue                    0                                                ; initial value for revenue
+      set Salles                     0                                                ; initial value for sales
+      set Need-Cash                  0                                                ; initial value for cash need
+      set Desire-Investment          0                                                ; initial value for desire investment
+      set Investment                 0                                                ; initial value for investment
+      set Number-Employee            0                                                ; initial value for number of employee
+      set Desire-Employee            0                                                ; initial value for desire employees
+      set Price-List                 [ ]                                              ; setup for the list which be used to colect the prices from the K-firms visited trying to buy capital
+      set Vacancy                    0                                                ; initial value for vacancy
+      set Bank-Deposit               Initial-liquidity-of-Firms                       ; initial money deposited at the bank
+      set Investment-Memory          Initial-Capital                                  ; initial value for Investment-Memory; parameter utilized to calculate the desire investment
+      set Util-Capacity              0                                                ; initial value for util-capacity
+      ]
+    ]
+end 
+
+to Setup-K-Firms
+    ask n-of 50 patches with [pycor >= 8] [                                           ; this command ask 50 patches which are located at coordinates y >= 8
+    sprout-Firms 1 [                                                                  ; ask to create one firm in each of those patches
+      set shape                      "house"                                          ; just for fun, not necessary for the model, used only for display in HUD netlogo
+      set size                       0.75                                             ; just for fun, not necessary for the model, used only for display in HUD netlogo
+      set color                      brown                                            ; just for fun, not necessary for the model, used only for display in HUD netlogo
+      set C-Firms?                   false                                            ; proper of Firms, false mean it is a capital producer firm
+      set Price                      2                                                ; initial value for price
+      set Capital                    Initial-capital                                  ; initial value for capital
+      set Stock                      Initial-production-K-firms                       ; initial value for stock
+      set Production                 Initial-production-K-firms                       ; initial value for production
+      set Revenue                    0                                                ; initial value for revenue
+      set Salles                     0                                                ; initial value for sales
+      set Need-Cash                  0                                                ; initial value for cash needed
+      set Desire-Investment          0                                                ; initial value for desire investment
+      set Investment                 ""                                               ; initial value for investment
+      set Number-Employee            0                                                ; initial number for employee
+      set Desire-Employee            0                                                ; initial value for desire employee
+      set Price-List                 ""                                               ; not applied to K-Firms
+      set Vacancy                    0                                                ; initial value for vacancy
+      set Bank-Deposit               Initial-liquidity-of-Firms                       ; initial money deposited at the bank
+      set Investment-Memory          ""                                               ; not applied to K-Firms
+      set Util-Capacity              ""                                               ; not applied to K-Firms
+      ]
+    ]
+end 
+
+to Setup-Bank
+  create-Banks 1 [                                                                    ; create one bank
+    set Retail-Bank?                 true                                             ; bank proper, true means it is a retail bank type
+    set Equity-Workers               sum [deposit-bank] of workers                    ; explicit
+    set Equity-Capitalists           sum [deposit-bank] of capitalists                ; explicit
+    set Equity-C-Firms               sum [bank-deposit] of c-firms                    ; explicit
+    set Equity-K-Firms               sum [bank-deposit] of k-firms                    ; explicit
+    set Equity-Bank                  Initial-equity-of-the-bank                       ; initial value fo the own bank equity
+    set Equity-Total                 Equity-Workers + Equity-Capitalists + Equity-C-Firms + Equity-K-Firms + Equity-Bank
+    set Intrabank-loan               0                                                ; initial value for the intrabank loans
+    set Intrabank-Rate               free-interest-rate                            ; initial intrabank interest rate
+    ]
+  if Wholesales-Banks? [                                                              ; swith positioned in the netlogo HUD
+    create-Banks 1 [                                                                  ; ask to create one bank
+      set Retail-Bank?               false                                            ; bank proper, false means it is a wholesaler bank type
+      set Equity-Workers             0                                                ; only retails bank had this
+      set Equity-Capitalists         0                                                ; only retails bank had this
+      set Equity-C-Firms             0                                                ; only retails bank had this
+      set Equity-K-Firms             0                                                ; only retails bank had this
+      set Equity-Bank                Initial-equity-of-the-bank                       ; initial value of bank own equity
+      set Equity-Total               Equity-Bank                                      ; initial value for total equity
+      set Intrabank-loan             0                                                ; initial value for intrabank loans
+      set Intrabank-Rate             free-interest-rate                            ; initial value for intrabank-rate
+      ]
+    ]
+  set Retail-Banks                   Banks with [    Retail-Bank?]                    ; create a group with all retails banks
+  set Wholesale-Banks                Banks with [not Retail-Bank?]                    ; create a group with all wholesalers banks
+end 
+
+;;******************************************************************************XXXXXXXX_GO_XXXXXXX******************************************************************************
+
+to Go                                                                                 ; here will be calling the functions
+  Function-Job-Market                                                                          ; this function plays the job market process
+  Function-Consumption-Market                                                                  ; this function plays the consumption market process
+  Function-Capital-Market                                                                      ; this function plays the capital market process
+  Function-UpDate-Production                                                                   ; this function plays the production process
+  Function-UpDate-Globals                                                                      ; this function update the globals
+  Function-Cash-Flows                                                                          ; this function update the cash flow
+  Function-Credit-Market                                                                       ; this function update the credit market
+  if Central-Bank? [ Function-Call-Central-Bank ]
+
+  tick                                                                                ; netlogo needs
+end 
+
+
+
+;;--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+;;******************************************************************************XXXXXXXX_Functions_XXXXXXX******************************************************************************
+;;--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+;;******************************************************************************XXXXXXXX_Function-JobMarket_XXXXXXX******************************************************************************
+
+
+
+To Function-Job-Market                                                                                                              ; here will be called the subfunctions
+  ask Firms                                 [ SubF-UpDate-Desire-Workers set Need-Cash 0                    ]                   ; reset the firms need for cash and update the desire workers number
+  ask Workers with [current-Income = 0]     [ SubF-Find-a-Job                                               ]                   ; ask workers which did not have a job to look for one
+  ask Workers                               [ set Deposit-Bank   Deposit-Bank + Current-Income         ]                   ; ask workers to update their income
+  ask Firms                                 [ set Bank-Deposit   Bank-Deposit - Number-Employee * wage ]                   ; ask firms to updated their bank account
+end 
+
+to SubF-UpDate-Desire-Workers                                                                                                   ; this subfunction update the desire workers
+  if  C-Firms?                              [                                                                              ; if C-firms is true, only C-Firm run this
+     set Desire-Employee   min list Desire-Employee ((Capital * Productivity-of-capital) / Productivity-of-labor)          ; set desire employee considering the capital production restriction
+     if C-Firm_Budget_rest02? [ if Desire-Employee * wage > bank-deposit [                                             ; update the desire employee considering the money availible
+         set Desire-Employee   max list 0 (int (Bank-Deposit / wage) + 1)                                                  ; update the desire employee considering the money availible
+          ] ]
+     ]
+  set Vacancy                                Desire-Employee   -   Number-Employee                                         ; opening new vacancies to contract more employee
+  while                                     [Vacancy < 0 and Number-Employee > 0] [                                        ; if vacancy < 0 need to fire some one
+    ask one-of my-in-Hireds [                                                                                              ; choose one employee
+      ask other-end [                                                                                                      ; ask this employee to set...
+        set Current-Income                   0                                                                             ; their income as 0, it was fired
+        ]
+      die                                                                                                                  ; die means this worker no more has a contract with the firm, fired
+      ]
+    set Vacancy                              Vacancy           + 1                                                         ; confirm the fired process, perhaps need to fire another one
+    set Number-Employee                      Number-Employee   - 1                                                         ; update the number of employee after the firing process
+    ]
+end 
+
+to SubF-Find-a-Job                                                                                                              ; this subfunction is used by the worker trying to find a job position
+  repeat Number-of-firms-visited-by-unemployed-workers [                                                                   ; the worker can try a maximum number of times to get a job, if not find he still unemployeed
+    setxy                                    random-xcor random-ycor                                                       ; this means the worker visit a firm at the grid
+    let Vacancy?                             false                                                                         ; auxiliar variable to this subfunction
+    ask one-of Firms-here  [                                                                                               ; ask to firm visited if ...
+      if Vacancy > 0 [                                                                                                     ; ... it has an open position
+        set Vacancy?                         true                                                                          ; update auxiliar variable
+        set Number-Employee                  Number-Employee + 1                                                           ; update the number of employee
+        set Vacancy                          Vacancy         - 1                                                           ; update the vacancy of this firm
+      ]
+    ]
+    if Vacancy? [                                                                                                          ; using the auxiliar variable to update the worker status
+      set Current-Income                      Wage                                                                         ; update the current-income of the worker
+      create-Hired-to                         one-of Firms-here [set hidden? true]                                         ; this link means the worker has a job, and it and the firm knows abouot eachother
+      stop                                                                                                                 ; for the repeat function, if it finds a job did not need try once more
+    ]
+  ]
+end 
+
+
+
+
+;;******************************************************************************XXXXXXXX_Function-ConsumpMarket_XXXXXXX******************************************************************************
+
+to Function-Consumption-Market                                                                                                      ; here will be called the subfunctions of the consumption market
+  ask C-firms    [ set demand 0 set salles 0 set revenue 0]                                                                ; updating properties of the C-Firms
+  ask Households [                                                                                                         ; explicit
+    SubF-UpDate-Desire-Consume                                                                                                  ; call subfunction for households update their consume desire
+    SubF-Visit-Firms                                                                                                            ; call subfunction for households visit firm trying to consume
+    if Desire-Consume > 0 [ SubF-Try-Consume ]                                                                                  ; if wana consume something, try buy it
+    ]
+end 
+
+to SubF-UpDate-Desire-Consume
+  set Human-Wealth                           (Memory-parameter-human-wealth             * Human-Wealth) + (1 - Memory-parameter-human-wealth) * Current-Income                 ; update human wealth
+  set Desire-Consume                          min list    Deposit-Bank                  ((Fraction-of-wealth-devoted-to-consumption * Deposit-Bank) + Human-Wealth)            ; update desire consume, it can not be higher than the money the household has
+  set Desire-Consume                          max list  0 Desire-Consume                                                                                                       ; ensure desire consume is not negative
+end 
+
+to SubF-Visit-Firms                                                                                                             ; this subfunction rule the shopping process, visitng the firms
+  let Who01                                   ""                                                                           ; auxiliar variable, save the name of the first firm visited
+  let Who02                                   ""                                                                           ; auxiliar variable, save the name of the second firm visited
+  let Price01                                 ""                                                                           ; auxiliar variable, save the price of the firm visited
+  let Price02                                 ""                                                                           ; auxiliar variable, save the price of the second firm visited
+  setxy random-xcor random 8                                                                                               ; choose the address of one random C-firm
+  ask one-of Firms-here [
+    set Who01                                 Who                                                                          ; save the name of this firm
+    set Price01                               Price                                                                        ; save the price of this firm
+    ]
+  setxy random-xcor random 8                                                                                               ; choose the address of the second firm
+  ask one-of Firms-here [
+    set Who02                                 Who                                                                          ; save the name of this firm
+    set Price02                               Price                                                                        ; save the price of this firm
+    ]
+  while [Who01 = Who02] [                                                                                                  ; if happened to visited the same firm twice, find another one, repeat the process above
+    setxy random-xcor random 8
+    ask one-of Firms-here [
+      set Who02                                 Who
+      set Price02                               Price
+      ]
+    ]
+  ifelse Price01 < Price02 [set Price-List list (Firm Who01) (Firm Who02) ] [set Price-List list (Firm Who02) (Firm Who01) ] ; create an organized list, the firm with the lowest price comes first
+end 
+
+to SubF-Try-Consume
+  let Firm-A                                    first Price-List                                                          ; extract the name of the firm with a better price
+  let Firm-B                                    last  Price-List                                                          ; extract the name of the firm with the worst price
+  let Qtt                                       Desire-Consume / [Price] of Firm-A                                        ; auxiliar variable, record the quantity can be bought
+  let expenses                                  0                                                                         ; auxiliar variable to update the deposit at bank later
+  let cons                                      0                                                                         ; auxiliar variable to record the quantity consumed
+  ask Firm-A [set Demand                        Demand + Qtt ]                                                            ; update the demand of C-firms
+  if [Stock] of Firm-A < Qtt [                                                                                            ; if there is not availible goods at the first firm ...
+    ask Firm-B [set Demand                      Demand + Qtt - [Stock] of Firm-A ]                                        ; also the second firm has a demand for their product
+    ]
+  ask Firm-A [                                                                                                            ; trying to consume at the better price
+    ifelse Stock > Qtt [                                                                                                  ; first situation, better one which can consume all at the better price
+      set Stock                                 Stock  - Qtt                                                              ; updated the stock of the firm
+      set Salles                                Salles + Qtt                                                              ; update the sales
+      set Revenue                               Price  * Qtt  + Revenue                                                   ; update the revenue
+      set expenses                              Price  * Qtt  + expenses                                                  ; update the auxiliar variable, used later to update the household bank account
+      set cons                                  cons   + Qtt                                                              ; update the auxiliar variable to register the qtt consumed
+      set Qtt                                   0                                                                         ; means no need to bought anymore
+      ] [
+      if Stock > 0 [                                                                                                      ; second situation, buying only part at first firm
+        set Salles                              Salles  + Stock                                                           ; update sales
+        set Revenue                             Price   * Stock + Revenue                                                 ; update revenue
+        set expenses                            Price   * Stock + expenses                                                ; update auxiliar variable, later used to update the bank account of the household
+        set cons                                cons    + Stock                                                           ; update stock
+        set Qtt                                 Qtt     - Stock                                                           ; update auxiliar variable to register the qtt consumed
+        set Stock                               0                                                                         ; update stock
+        ]
+      ]
+    ]; end ask Firm-A
+  if Qtt > 0 [                                                                                                            ; means household did not consume all it wanted to in the first firm
+    set Qtt                                     (Qtt * [Price] of Firm-A) / [Price] of Firm-B                             ; auxiliar variable, max quantity can consume at this price
+    ask Firm-B [                                                                                                          ; updating values at the second firm
+      ifelse Stock > Qtt [                                                                                                ; as above...
+        ;first situation, buy all
+        set Stock                                 Stock  - Qtt
+        set Salles                                Salles + Qtt
+        set Revenue                               Price  * Qtt  + Revenue
+        set expenses                              Price  * Qtt  + expenses
+        set cons                                  cons   + Qtt
+        set Qtt                                   0
+        ] [
+        ;second situation, did not consume all he wants
+        if Stock > 0 [
+          set Salles                              Salles  + Stock
+          set Revenue                             Price   * Stock + Revenue
+          set expenses                            Price   * Stock + expenses
+          set cons                                cons    + Stock
+          set Qtt                                 Qtt     - Stock
+          set Stock                               0
+          ]
+        ]
+      ];end ask firm-B
+    ];end Qtt > 0
+  ;update households atributes
+  set Consume                                     cons                                                                  ; update the Consume of the households
+  set Deposit-Bank                                Deposit-Bank - expenses                                               ; update the bank account of the households
+end 
+
+
+
+
+;;*********************************************************************************************Function-Capital-Market*********************************************************************************************
+
+to Function-Capital-Market                                                                                              ; this function set the rules for the capital goods market
+  ask K-Firms [ set Demand 0 set revenue 0 set Salles  0 ]                                                              ; upadte K-Firms properties
+  ask C-Firms [                                                                                                         ; updating the c-Firms properties
+    set Investment                 0
+    SubF-UpDate-Investment-Desire                                                                                       ; call sub-function to update investment
+    if Desire-Investment > 0 [ SubF-UpDate-Investment ]                                                                 ; if there is need for investment call the sub-function for investment
+    ]
+end 
+
+to SubF-UpDate-Investment-Desire                                                                                        ; sub-function with procedure to update the investment need of a C-Firm
+  set Desire-Investment            0                                                                                    ; reset variable
+  let rand                         random-float 1                                                                       ; auxiliar sub-function variable
+  if  rand < Probability-of-investing [                                                                                 ; check if it is time to invest
+    if ticks > 1 [                                                                                                      ; assure that there is no investment in time equal zero
+      set Investment-Memory        (Memory-parameter-investment * Investment-Memory) + (1 - Memory-parameter-investment) * Util-Capacity * Capital                               ; begin of equation of capital motion
+      set Desire-Investment        max list 0 (( (1 / Desire-capacity-utilization-rate) + (Depreciation-of-capital / Probability-of-investing) ) * Investment-Memory - Capital)  ; end of equation of capital motion
+      set Need-Cash                Need-Cash   +  Desire-Investment * Capital-Price-Level                                                                                        ; check for cash needed
+      ]
+    ]
+end 
+
+to SubF-UpDate-Investment                                                                                               ; this subfunction is called when there is need for investment
+  if Desire-Investment > 0 [                                                                                            ; just trying to find product in two diferents K-Firms
+    SubF-Visit-K-Firms                                                                                                  ; visit two k-firms, take note of their prices
+    SubF-Buy-Capital                                                                                                    ; sub-function used to bought capital
+  ]
+end 
+
+to SubF-Visit-K-Firms                                                                                                   ; searching for the better price, similar to the households sub-functions, check for details there
+  let X                                xcor                                                                             ; the diference is that the firm need to have a fixed position. this X and Y auxiliar variable save the firm position at the grid
+  let Y                                ycor
+  let Who01                            ""
+  let Price01                          ""
+  let Who02                            ""
+  let Price02                          ""
+  setxy                                random-xcor (random 2 + 8)
+  ask one-of other Firms-here [
+    set Who01                          Who
+    set Price01                        Price
+    ]
+  setxy                                random-xcor (random 2 + 8)
+  ask one-of other Firms-here [
+    set Who02                          Who
+    set Price02                        Price
+    ]
+  while [ Who01 = Who02 ] [
+    setxy                             random-xcor (random 2 + 8)
+    ask one-of other Firms-here [
+      set Who02                       Who
+      set Price02                     Price
+    ]
+    ]
+  ifelse Price01 < Price02 [set Price-List list (Firm Who01) (Firm Who02) ] [set Price-List list (Firm Who02) (Firm Who01) ]
+  setxy                              X Y                                                                                  ; return the firm to their position after the prices search
+end 
+
+to SubF-Buy-Capital                                                                                                       ; sub-function to buy capital goods
+  let expenses                                  0                                                                         ; sub-function auxiliar variable to save the expenses of the C-Firm
+  let New-Inv                                   0                                                                         ; sub-function auxiliar variable to save the qtt capital bough by the C-Firm
+  let Firm-A                                    first Price-List                                                          ; extract the name of the K-firm with the better price
+  let Firm-B                                    last  Price-List                                                          ; extract the name of the K-firm with the seccond price
+  let Qtt                                       Desire-Investment                                                         ; auxiliar variable register the qtt C-firm want to buy
+  if c-Firm_Budget_rest01? [                                                                                              ; including budget restriction, this way the demand of k-firm is afected by the monetary restriction
+    let Budget                                    Qtt * [Price] of Firm-A                                                 ; auxiliar variable with the monetary value the C-Firm can afford to invest
+    if Budget > Bank-Deposit [                                                                                            ; check if the C-Firm has enough money to invest
+      set Qtt                                     max list 0 (Bank-Deposit / [Price] of Firm-A)                           ; rebalance the investment according to money availible
+    ]
+  ]
+  ask Firm-A [ set Demand                       Demand + Qtt ]                                                            ; updating demand at K-Firm
+  if [stock] of Firm-A < Qtt [                                                                                            ; check if the K-Firm has enough stock to supply
+    ask Firm-B [ set Demand                     Demand + Qtt - [Stock] of Firm-A ]                                        ; with the first did no has enough stock, also update the demand of the second firm
+    ]
+  ifelse [stock] of Firm-A >= Qtt [                                                                                       ; trying to buy
+    ask Firm-A [                                                                                                          ; first situation, better one, it is possible to bought all at the better price
+      set stock                                 stock   - Qtt                                                             ; updating properties of the K-Firm ...
+      set Revenue                               Price   * Qtt + Revenue                                                   ; ...
+      set expenses                              Price   * Qtt + expenses                                                  ; ...
+      set Salles                                Salles  + Qtt                                                             ; ...
+      set New-Inv                               New-Inv + Qtt                                                             ; ...
+      set Qtt                                   0                                                                         ; ...     end first situation for Firm-A
+      ]
+     ] [
+     if [stock] of Firm-A > 0 [                                                                                           ; second situation, there is not enough stock at the first firm
+       ask Firm-A [                                                                                                       ; updating properties of the K-Firm ...
+         set Revenue                            Price   * Stock + Revenue                                                 ; ...
+         set expenses                           Price   * Stock + expenses                                                ; ...
+         set Salles                             Salles  + Stock                                                           ; ...
+         set Qtt                                Qtt     - Stock                                                           ; ...
+         set New-Inv                            New-Inv + Stock                                                           ; ...
+         set Stock                              0                                                                         ; ...        end second situation for Firm-A
+         ]
+       ]
+     ]
+
+  if Qtt > 0 [                                                                                                            ; means the C-Firm did not consume all investment needed
+    ifelse [stock] of Firm-B >= Qtt [                                                                                     ; first situation, it is possible to bought all it is needed
+      ask Firm-B [                                                                                                        ; updating properties of the K-Firm ...
+        set stock                                 stock   - Qtt                                                           ; ...
+        set Revenue                               Price   * Qtt + Revenue                                                 ; ...
+        set expenses                              Price   * Qtt + expenses                                                ; ...
+        set Salles                                Salles  + Qtt                                                           ; ...
+        set New-Inv                               New-Inv + Qtt                                                           ; ...
+        set Qtt                                   0                                                                       ; ...      end first situation for Firm-B
+      ]
+    ] [
+    if [stock] of Firm-B > 0 [                                                                                            ; second situation, the C-Firm will not invest all it wants to
+      ask Firm-B [                                                                                                        ; updating the properties of the K-Firm ...
+        set Revenue                            Price   * Stock + Revenue                                                  ; ...
+        set expenses                           Price   * Stock + expenses                                                 ; ...
+        set Salles                             Salles  + Stock                                                            ; ...
+        set Qtt                                Qtt     - Stock                                                            ; ...
+        set New-Inv                            New-Inv + Stock                                                            ; ...
+        set Stock                              0                                                                          ; ...      end second situation   Firm-B
+      ]
+    ]
+    ]
+  ]
+    set Investment                              New-Inv                                                                   ; updating the propertie of the C-Firm, the investment it was acomplished
+    set Bank-Deposit                            Bank-Deposit - expenses                                                   ; updating the bank account the C-Firm
+end 
+
+
+
+
+;****************************************************************************************Function-UpDate-Production*********************************************************************************************
+
+to Function-UpDate-Production                                                                                            ; this function update the production of Firms
+  ask K-Firms [                                                                                                          ; updating the production of K-Firms
+    set Production                  Number-Employee         * Productivity-of-labor                                      ; updating actual production
+    set Stock                       Stock                   * (1 - depreciation-of-capital)           + Production  ; updating stock
+    set Bank-Deposit                Bank-Deposit            + Revenue                                                    ; update bank account
+    set Delta                       Production              - Demand                                                     ; variable used to decide new production
+    ifelse K-Qtt-Function?          [ set Desire-Employee    Report-K-Update-Desire-Employee             ]               ; the user may force the k-firm to produce capital goods ...
+                                    [ set Desire-Employee    Demand   /   Productivity-of-labor   ]                      ; ... if the switcher at HUD is turned off
+    ifelse K-UpDate-Price?          [ set Price              Report-K-Update-Price                       ]               ; the user may force the capital price be fixed if ...
+                                    [ set Price              wage / productivity-of-labor         ]                      ; ... the switcher at HUD is turned off
+    ]
+  ask C-Firms [                                                                                                          ; updating the production of C-Firms
+    set Capital                     Capital                   - Capital * Util-Capacity * Depreciation-of-capital + Investment                      ; update the capital avalible for production process
+    set Production                  min list                 (Number-Employee   *   Productivity-of-labor) (Capital * Productivity-of-capital)      ; update actual production limited by the availible capital
+    set Stock                       Production                                                                           ; the C-Goods are perishable, so the actual stock are equal the production
+    set Util-Capacity               Production               / (Capital * Productivity-of-capital)                       ; updat utilized capacity
+    set Bank-Deposit                Bank-Deposit             + Revenue                                                   ; update bank account
+    set Delta                       Production               - Demand                                                    ; variable used to decide new production level
+    ifelse C-Qtt-Function?          [ set Desire-Employee    Report-C-Update-Desire-Employee ]                           ; the user may force the C-Firm to produce C-goods ...
+                                    [ set Desire-Employee    Demand            /   Productivity-of-labor   ]             ; ... if the switcher at HUD is turned off
+    ifelse C-UpDate-Price?          [ set Price              Report-C-Update-Price               ]                       ; the user may force the consumption good be fixed ...
+                                    [ set Price              wage / productivity-of-labor ]                              ; ... if the switcher at HUD is turned off
+    ]
+end 
+
+to-report Report-C-Update-Price                                                                                                             ; reporting the new price for C-Firms ...
+  let N-P                           Price                                                                                                   ; local auxialiar variable
+  if  (delta <= 0) and              (Price <  Goods-Price-Level)  [ set N-P      Price * (1 + random-float 1 * Price-adjust-parameter)  ]   ; rule to reduce current price
+  if  (delta >  0) and              (Price >  Goods-Price-Level)  [ set N-P      Price * (1 - random-float 1 * Price-adjust-parameter)  ]   ; rule to increase current price
+  report N-P                                                                                                                                ; report new price
+end 
+
+to-report Report-K-Update-Price                                                                                                             ; reporting the new price for K-firms
+  let N-P                           Price                                                                                                   ; local auxiliar variable
+  if (delta <= 0) and               (Price <   Capital-Price-Level) [ set N-P Price * (1 + random-float 1 * Price-adjust-parameter )  ]     ; rule to reduce price
+  if (delta >  0) and               (Price >   Capital-Price-Level) [ set N-P Price * (1 - random-float 1 * Price-adjust-parameter )  ]     ; rule to increase price
+  report                            N-P                                                                                                     ; report new price
+end 
+
+to-report Report-C-Update-Desire-Employee                                                                                                                            ; reporting new need for a C-firm employees
+  let N-E                           Number-Employee                                                                                                                  ; local auxiliar variable
+  if (delta <= 0) and               (Price >= Goods-Price-Level)  [ set N-E ((Production - Quantity-adjust-parameter * delta) / productivity-of-labor) ]             ; possible condition to change actual number of employee
+  if (delta >  0) and               (Price <  Goods-Price-Level)  [ set N-E ((Production - Quantity-adjust-parameter * delta) / productivity-of-labor) ]             ; other possible condition to change actual number of employee
+  report N-E                                                                                                                                                         ; report new desire employee
+end 
+
+to-report Report-K-Update-Desire-Employee                                                                                                                             ; reporting new need for a C-firm employees
+  let N-E                           Number-Employee                                                                                                                   ; local auxiliar variable
+  if (delta <= 0) and               (Price >=  Capital-Price-Level) [ set N-E ((Production - Quantity-adjust-parameter * delta - Stock) / productivity-of-labor)  ]   ; possible condition to change actual number of employee
+  if (delta >  0) and               (Price <   Capital-Price-Level) [ set N-E ((Production - Quantity-adjust-parameter * delta - Stock) / productivity-of-labor)  ]   ; other possible contidtion to change actual number of employee
+  report N-E                                                                                                                                                          ; report new need for employees
+end 
+
+
+
+
+;;***************************************************************************************************GLOBALS*********************************************************************************************
+
+to Function-UpDate-Globals                                                                                                                                    ; this function update the globals
+  set Unemployment              1 - ((sum [Number-Employee]              of firms) / Number-of-workers )                                                      ; update the unemployemnt rate
+  set GDP                             sum [Production  ]                 of Firms - sum [stock]  of K-Firms   if GDP < 0 [set GDP 1]                          ; update the GDP, sum production - stocks
+  set Total-Investment                sum [Investment  ]                 of C-Firms                                                                           ; update investment realized by the C-Firms
+  set Consumption                     sum [Consume     ]                 of Households                                                                        ; update the consumption
+  set Total-Loans                     sum [Current-Retail-Loan]          of Firms     +     sum [Current-wholesale-Loan]          of Firms                    ; update the sum of retail loans, all firms
+  set Total-Loans-C-Firms             sum [Current-Retail-Loan]          of C-Firms   +     sum [Current-wholesale-Loan]          of C-Firms                  ; update the sum of retail loans for C-Firms
+  set Total-Loans-K-Firms             sum [Current-Retail-Loan]          of K-Firms   +     sum [Current-wholesale-Loan]          of K-Firms                  ; update the sum of retail loans for K-Firms
+  set Goods-Price-Level_t-1               Goods-Price-Level
+  set Capital-Price-Level_t-1             Capital-Price-Level
+  if sum [Salles] of C-Firms != 0   [ set Goods-Price-Level              sum [Revenue     ] of C-Firms                  / sum [Salles] of C-Firms ]           ; update the goods price level
+  if sum [Salles] of K-Firms != 0   [ set Capital-Price-Level            sum [Revenue     ] of K-Firms                  / sum [Salles] of K-Firms ]           ; update the capital price level
+end 
+
+
+
+
+;*********************************************************************************************Function-Cash-Flows*********************************************************************************************
+
+to Function-Cash-Flows                                                                                                         ; this function set the moviment of cash in the system
+  ask C-Firms [                                                                                                                ; Cash flow of C-Firms
+    let div                                     0                                                                              ; auxiliar variable
+    if  Profit? [                                                                                                              ; HUD control
+      set Profit                                max list 0 ( Revenue - Number-Employee * Wage)                                 ; check if had profit this period
+      set Dividend                              min list   ( Dividend-payout-ratio     * Profit) (max list 0 (Bank-Deposit))   ; if there was profit setup dividend
+      set Bank-Deposit                          Bank-Deposit - Dividend                                                        ; reduce the bank account the dividen which will be payed to the capitalist
+      set Div                                   Dividend                                                                       ; auxiliar variable bring the div to the capitalist later
+      ]
+    ask one-of my-out-owners [                                                                                                 ; calling the owner of this firm
+      ask other-end [                                                                                                          ; other end is the capitalist
+        set Current-Income                     div                                                                             ; update the current income
+        set Deposit-Bank                       Deposit-Bank   +   div                                                          ; update the household bank account
+      ]
+    ]
+    ]
+
+  ask K-Firms [                                                                                                                ; cash flow of the K-firms
+    let div                                     0                                                                              ; auxiliar variable
+    if  Profit? [                                                                                                              ; HUD control
+      set Profit                                max list 0 ( Revenue - Number-Employee * Wage)                                 ; check if had profit this period
+      if Prof-K-Firms? [                                                                                                       ; switch in HUD control
+        set Profit                              max list 0 ( Bank-Deposit )                                                    ; set max profit to avoid negative bank account
+         ]
+      set Dividend                              min list   ( Dividend-payout-ratio     * Profit) (max list 0 (Bank-Deposit))   ; set dividend
+      set Bank-Deposit                          Bank-Deposit - Dividend                                                        ; update bank account
+      set Div                                   Dividend                                                                       ; auxiliar variable bring the value of div to the capitatilist later
+      ]
+    ask one-of my-out-owners [                                                                                                 ; calling the owner of this firm
+      ask other-end [                                                                                                          ; other is the capitalist
+        set Current-Income                     div                                                                             ; update the current income
+        set Deposit-Bank                       Deposit-Bank   +   div                                                          ; update the household bank account
+      ]
+    ]
+    ]
+
+  ask Retail-Banks [                                                                                                           ; update the data into the retail bank system
+    set Equity-Workers               sum [deposit-bank] of workers                                                             ; explicit
+    set Equity-Capitalists           sum [deposit-bank] of capitalists                                                         ; explicit
+    set Equity-C-Firms               sum [bank-deposit] of c-firms                                                             ; explicit
+    set Equity-K-Firms               sum [bank-deposit] of k-firms                                                             ; explicit
+    set Equity-Bank                  Initial-equity-of-the-bank                                                                ; explicit
+    set Equity-Total                 Equity-Workers + Equity-Capitalists + Equity-C-Firms + Equity-K-Firms + Equity-Bank       ; explicit
+    ]
+end 
+
+
+
+
+;;******************************************************************************************Function-Credit-Market*********************************************************************************************
+
+to Function-Credit-Market                                                                             ; this function rules the credit market system
+  SubF-Call-Matrix-Formation                                                                          ; function to set the matrix used in R to calculate the life spam of firms
+  set C-Broke                         0                                                               ; global variable for total C-firm went broke this period
+  set K-Broke                         0                                                               ; global variable for total K-firm went broke this period
+  if Wholesales-Banks? [ SubF-Call-Wholesales  SubF-Call-Intrabank ]                                  ; switch in HUD to control the introduction of the wholesaler bank
+  if Retail-Banks? [                                                                                  ; switch in HUD to controle the retail bank
+    ask Firms [                                                                                       ; firms update their status with the retail bank
+      SubF-Update-Installment                                                                         ; to update the installment
+      SubF-Update-Cash-Need                                                                           ; to update firm cash need
+      SubF-Update-Assets                                                                              ; to update assets value
+      SubF-Update-Leverage                                                                            ; to update the leverage, all this is used to rule interest rate praticed later
+    ]
+    ask K-firms [
+      SubF-Ask-for-K-Credit                                                                           ; Check if this K-Firm needs credit, if it is need will be asked in this subfunction
+      ]
+    ask C-Firms [
+      SubF-Ask-for-C-Credit                                                                           ; check if this C-firm needs credti, if it is need will be asked in this subfunction
+      ]
+    let C-Loans                       sum [Current-Retail-Loan] of Firms                              ; local variable
+    let I-Receive                     sum [Interest-Pay       ] of Firms                              ; local variable
+    let D-Receive                     sum [Installment-Pay    ] of Firms                              ; local variable
+    ask Retail-Banks [                                                                                ; the retail bank update the balance after the new was created
+      set Total-Loans-C-Firms         sum [Current-Retail-Loan] of C-Firms                            ; explicit
+      set Total-Loans-K-Firms         sum [Current-Retail-Loan] of K-Firms                            ; explicit
+      set Total-Loans                 sum [Current-Retail-Loan] of Firms                              ; explicit
+      set Interest-Receive            I-Receive                                                       ; explicit
+      set Profit                      Profit + I-Receive                                              ; explicit
+      set Installment-Receive         D-Receive                                                       ; explicit
+    ]
+
+    if C-Broke? [                                                                                     ; switch check if the user want the broke procedure
+      ask C-Firms [                                                                                   ; this rules is for C-firm broke
+        ifelse (Retail-Bankruptcy > T-Ban) or (Wholesale-Bankruptcy > T-Ban) [                        ; check if this firm did not pay their debts with a bank
+          SubF-Go-Bankruptcy-Type-C                                                                   ; subfunction to lead the broke process
+          set Broke 1                                                                                 ; if this bad increase the broke status
+          ] [ set Broke 0 ]                                                                           ; if the firm has no open debt reset their broke status
+         ]
+      ]
+    if K-Broke? [                                                                                     ; the same as the C-firm, check above for details
+      ask K-Firms [
+        ifelse (Retail-Bankruptcy > T-Ban) or (Wholesale-Bankruptcy > T-Ban) [
+          SubF-Go-Bankruptcy-Type-K
+          set Broke 1
+          ] [ set Broke 0 ]
+        ]
+      ]
+  ]
+end 
+
+to SubF-Go-Bankruptcy-Type-K                                                                           ; this subfunction rules the process for how a K-firm broke
+  set K-Broke                          K-Broke  + 1                                                    ; increase the global parameter which count of broke status
+  set Retail-Bankruptcy                0                                                               ; reset this parameter
+  set Wholesale-Bankruptcy             0                                                               ; reset the parameter
+  let debts                            Current-Retail-Loan + Current-Wholesale-Loan                    ; local auxialiar variable
+  ask one-of my-out-owners [                                                                           ; use the capitalist to rebuild the firm
+    ask other-end [                                                                                    ; find out who is the owner of this firm
+      set Deposit-Bank                 Deposit-Bank - Initial-liquidity-of-Firms                       ; update the bank account of the capitalist, reduce the moneu invested to recreat the firm
+      ]
+     ]
+  set Current-Retail-Loan              0                                                               ; reset the loan of the firm after the bankruptcy
+  set Current-Wholesale-Loan           0                                                               ; reset the loan of the firm after the bankruptcy
+  set Bank-Deposit                     Initial-liquidity-of-Firms                                      ; iniciate the firm with the money from the capitalist whom owner the firm
+end 
+
+to SubF-Go-Bankruptcy-Type-C                                                                           ; this subfunction rules the process for the C-firm bankruptcy
+  set C-Broke                           C-Broke + 1                                                    ; increase the global parameter which count the broke status
+  set Retail-Bankruptcy                 0                                                              ; reset the parameter
+  set Wholesale-Bankruptcy              0                                                              ; reset the parameter
+  let debts                             Current-Retail-Loan + Current-Wholesale-Loan                   ; local auxiliar variable
+  ask one-of my-out-owners [                                                                           ; find out who is the owner of this firm
+    ask other-end [                                                                                    ; the owner
+      set Deposit-Bank                  Deposit-Bank - Initial-liquidity-of-Firms                      ; update the bank account of the capitalist, reduce the money used to rebuild the firm
+      ]
+     ]
+  set Current-Retail-Loan               0                                                              ; reset the parameter
+  set Current-Wholesale-loan            0                                                              ; reset the parameter
+  if Capital-Destruction? [             set Capital Initial-Capital ]                                  ; reset the capital of the c-firm
+  set Bank-Deposit                      Initial-liquidity-of-Firms                                     ; updated the bank account with the money from the capitalist
+end 
+
+to SubF-Update-Installment                                                                             ; this subfunction update the installment debt
+  set  Interest-Pay                     0                                                              ; reset parameter
+  set  Installment-Pay                  0                                                              ; reset parameter
+  if Current-Retail-Loan > 0 [                                                                         ; check if exist loan
+    ifelse Bank-deposit >= ((Installment-on-debt + Interest-Retail ) * Current-Retail-Loan) [          ; check if there is money enough to pay the debts
+      set Interest-Pay                Interest-Retail     * Current-Retail-Loan                        ; update the parameter with the value will be payed
+      set Bank-Deposit                Bank-Deposit        - interest-pay                               ; update parameter
+      set Installment-Pay             Installment-on-debt * Current-Retail-Loan                        ; update parameter
+      set Bank-Deposit                Bank-Deposit        - Installment-Pay                            ; update parameter
+      set Current-Retail-Loan         Current-Retail-Loan - Installment-Pay                            ; update parameter
+      set Retail-Bankruptcy          0                                                                 ; as the firm pay debts this period, reset the parameter for bankruptcy
+      ] [
+    set Retail-Bankruptcy             Retail-Bankruptcy  +  1                                          ; if the firm did not had money she will be closer and closer to bankruptcy
+      ]
+    ]
+end 
+
+to SubF-Update-Cash-Need                                                                               ; subfuntion used for update the need for cash
+   set Need-Cash                      max list 0 (Need-Cash + Number-Employee * Wage - Bank-Deposit + (Installment-on-debt + Interest-Retail) * Current-Retail-Loan)
+end 
+
+to SubF-Update-Assets                                                                                  ; subfunction to update the assets, which differ from c-firm to k-firm type
+  ifelse C-Firms? [
+    set Assets                       max list 0 (Stock      * Price  +  Bank-Deposit  + Capital * Capital-Price-Level)
+    ] [
+    set Assets                       max list 0 (Stock      * Price  +  Bank-Deposit )
+    ]
+end 
+
+to SubF-Ask-for-K-Credit                                                                               ; this subfunction is called when there is need for a loan
+  let lev                           mean [Leverage] of K-Firms                                         ; local parameter used by a bank
+  let risk                          1                                                                  ; local parameter used by a bank
+  let Availible-Credit              Bank-loss-parameter * (sum [Equity-Bank] of Retail-Banks * B-Lev * ( risk  ) -  sum [Current-Retail-Loan] of Firms)  ; how much money the bank has to offer as a loan
+  if (Need-Cash > 0)  and (Availible-Credit > Need-Cash) and (Retail-Bankruptcy < T-Ban) [             ; check if the need of a firm is lower then the availible credit
+    set Current-Retail-Loan          Current-Retail-Loan  +  Need-Cash                                 ; updating the loans parameter
+    set Bank-Deposit                 Bank-Deposit         +  Need-Cash                                 ; updating the bank account with the money received
+    ifelse Update-Interest?          [ SubF-Update-Interest-Retail-K ] [ set Interest-Retail              free-interest-rate] ; call a subfunction to update the interest rate of this firm
+    ]
+end 
+
+to SubF-Ask-for-C-Credit                                                                               ; this subfunction is called when there is need for a loan, c-firm type
+  let lev                           mean [Leverage] of C-Firms                                         ; local parameter used by a bank
+  let risk                          1                                                                  ; local parameter used by a bank
+  let Availible-Credit              Bank-loss-parameter * (sum [Equity-Bank] of Retail-Banks * B-Lev * ( risk  ) -  sum [Current-Retail-Loan] of Firms)  ; how much money the bank has to offer as a loan
+  if (Need-Cash > 0)  and (Availible-Credit > Need-Cash) and (Retail-Bankruptcy < T-Ban) [             ; check if the need of a firm is lower then the availible credit
+    set Current-Retail-Loan          Current-Retail-Loan  +  Need-Cash                                 ; updating the loans parameter
+    set Bank-Deposit                 Bank-Deposit         +  Need-Cash                                 ; updating the bank account with the money received
+    ifelse Update-Interest?          [ SubF-Update-Interest-Retail-C ] [ set Interest-Retail              free-interest-rate] ; call a subfunction to update the interest rate of this firm
+    ]
+end 
+
+to SubF-Update-Interest-Retail-C                                                                                                         ; update the interest rate of a C-firm
+  let prob-die                       (1 / (1 + e ^ ( - Beta_1-C-Firms - (Beta_2-C-Firms * leverage))))                                   ; local variable, save the prob of this firm die
+  set T-expected                     (1 / prob-die)                                                                                      ; calculate the life expectation of this firm
+  let Numerator                      (1 + (free-interest-rate / installment-on-debt))                                                 ; local auxiliar variable, first part to calculate the new interest rate
+  let Denominator                    ((1 - (1 - installment-on-debt) ^ (T-expected + 1)) / installment-on-debt)                          ; // // second part of the new interest rate
+  let new-int                        Bank-gross-mark-up * ((numerator / denominator) - installment-on-debt)                              ; calculating the new interest rate
+  set Interest-Retail                (Interest-Retail   * (Current-Retail-Loan - Need-Cash) + new-int * Need-Cash) / Current-Retail-Loan ; update the interest rate as mean of the new and the later interest rate
+end 
+
+to SubF-Update-Interest-Retail-K                                                                                                         ; update the interest rate of a K-firm
+  let prob-die                       (1 / (1 + e ^ ( - Beta_1-K-Firms - (Beta_2-K-Firms * leverage))))                                   ; the same as the C-firm, check above for details
+  set T-expected                     (1 / prob-die)
+  let Numerator                      (1 + (free-interest-rate / installment-on-debt))
+  let Denominator                    ((1 - (1 - installment-on-debt) ^ (T-expected + 1)) / installment-on-debt)
+  let new-int                        Bank-gross-mark-up * ((numerator / denominator) - installment-on-debt)
+  set Interest-Retail                (Interest-Retail   * (Current-Retail-Loan - Need-Cash) + new-int * Need-Cash) / Current-Retail-Loan
+end 
+
+to SubF-Update-Leverage                                                                                                                  ; updating the leverage of a firm
+  if Need-Cash > 0                 [ set Leverage                      (Current-Retail-Loan + Need-Cash) / (Assets + Current-Retail-Loan + Need-Cash)]
+  if (Current-Retail-Loan = 0)     [ set Leverage 0 ]
+end 
+
+to SubF-Distribute-Dividends                                                                                                             ; this subfunction set the rules for dividend for banks
+  ask Retail-Banks [                                                                                                                     ; the retail bank dividend
+    let Div                         Profit  / (Number-of-consumptions-firms + number-of-capital-goods-firms)                             ; calculate dividend as part of the total profit divided by capitalists
+    ask Capitalists [                                                                                                                    ; call each of one of the capitalist
+      set Current-Income           Current-Income + div                                                                                  ; increase the income of the capitalist
+      set Deposit-Bank             Deposit-Bank   + div                                                                                  ; update the bank account of the capitalist
+      ]
+    set Equity-Total               Equity-Total   - Profit
+    set Profit                     0
+    ]
+  ask Wholesale-banks [                                                                                                                  ; the wholesalers bank dividend
+    set Profit                     max list 0 (Interest-Receive - (Intrabank-loan * Intrabank-rate)) *  Dividend-payout-ratio            ; check if there was profit this period                                                       ;
+    let div                        Profit  / (Number-of-consumptions-firms + number-of-capital-goods-firms)                              ; calculate dividend as part of the total profit divided by capitalists
+    ask Capitalists [                                                                                                                    ; call each of one of the capitalist
+      set Current-income           current-income + div                                                                                  ; increase the income of the capitalist
+      set deposit-bank             deposit-bank   + div                                                                                  ; update the bank account of the capitalist
+      ]
+    set Equity-Total               Equity-Total - Profit
+  ]
+end 
+
+to SubF-Call-Matrix-formation                                                                                              ; subfunction that manage the R rotines
+  ask C-Firms [
+    set Matrix-C-Firms-Bankruptcy matrix:set-and-report Matrix-C-Firms-Bankruptcy 1 Mj Leverage                            ; update the matrix with information about C-Firms
+    ifelse (Retail-Bankruptcy < T-Ban) and (Wholesale-Bankruptcy < T-Ban)                                                  ; update a position with 0 if the firm is alive, and 1 if the firm went bankruptcy
+    [ set Matrix-C-Firms-Bankruptcy matrix:set-and-report Matrix-C-Firms-Bankruptcy 0 Mj 0 ]
+    [ set Matrix-C-Firms-Bankruptcy matrix:set-and-report Matrix-C-Firms-Bankruptcy 0 Mj 1 ]
+    set Mj Mj + 1 if Mj > (Window - 1) [ set Mj 0]                                                                         ; move the matrix to the next position
+    ]
+
+  ask K-Firms [
+    set Matrix-K-Firms-Bankruptcy matrix:set-and-report Matrix-K-Firms-Bankruptcy 1 Mjk leverage                           ; update the matrix with information abou the K-firms
+    ifelse (Retail-Bankruptcy < T-Ban) and (Wholesale-Bankruptcy < T-Ban)                                                  ; update a position with 0 if the if alive, and 1 if the firm went bankruptcy
+    [ set Matrix-K-Firms-Bankruptcy matrix:set-and-report Matrix-K-Firms-Bankruptcy 0 Mjk 0 ]
+    [ set Matrix-K-Firms-Bankruptcy matrix:set-and-report Matrix-K-Firms-Bankruptcy 0 Mjk 1 ]
+    set Mjk Mjk + 1 if Mjk > (Window - 1) [ set Mjk 0]                                                                     ; move the matrix the next position
+    ]
+
+  let A matrix:get-row Matrix-C-Firms-Bankruptcy 0                                                                         ; creat an object with the first row of the matrix
+  let B matrix:get-row Matrix-C-Firms-Bankruptcy 1                                                                         ; creat an object with the seccond row of the matrix
+
+  r:put   "a" A                                                                                                            ; call the R and put there the object A
+  r:put   "b" B                                                                                                            ; call the R and put there the object B
+  r:eval  "c <- glm(a ~ b, family = binomial)"                                                                             ; call R and ask to solve the logistic function with the inputs A and B
+
+  let C  r:get "c$coefficients"                                                                                            ; call R and the coefficients into object C
+  set Beta_1-C-Firms  first C                                                                                              ; save the beta-1 for C-firms
+  if  Beta_1-C-Firms < (- 25)      [set Beta_1-C-Firms (- 25)]                                                             ; assure value into a meaninful range, because the first period there are not enough information
+  set Beta_2-C-Firms  last  C                                                                                              ; sabe the beta-2 for C-firms
+  if  Beta_2-C-Firms > 0  = false  [set Beta_2-C-Firms      0]                                                             ; assure value into a meaninful range, because the first period there are not enough information
+  if  Beta_2-C-Firms > 25          [set Beta_2-C-Firms     25]                                                             ; assure value into a meaninful range, because the first period there are not enough information
+
+  set A matrix:get-row Matrix-K-Firms-Bankruptcy 0                                                                         ; creat an object with the first row of the matrix
+  set B matrix:get-row Matrix-K-Firms-Bankruptcy 1                                                                         ; creat an object with the seccond row of the matrix
+
+  r:put   "a" A                                                                                                            ; call the R and put there the object A
+  r:put   "b" B                                                                                                            ; call the R and put there the object B
+  r:eval  "c <- glm(a ~ b, family = binomial)"                                                                             ; call R and ask to solve the logistic function with the inputs A and B
+
+  set C  r:get "c$coefficients"                                                                                            ; the same as for the C-firms, look above for details
+  set Beta_1-K-Firms  first C
+  if  Beta_1-K-Firms < (- 25)     [set Beta_1-K-Firms  (- 25)]
+  set Beta_2-K-Firms  last  C
+  if (Beta_2-K-Firms > 0) = false [set Beta_2-K-Firms       0]
+  if  Beta_2-K-firms > 25         [set Beta_2-K-Firms      25]
+end 
+
+
+To SubF-Call-Wholesales                                  ; subfunction used for firms to ask credit at the wholesalers banks
+    ask Firms [
+      SubF-Update-Installment-W                          ; call subfunction to update installment
+      SubF-Update-Cash-Need                              ; call subfunction to update possible need for cash
+      SubF-Update-Assets                                 ; call subfunction to update the assets
+      SubF-Update-Leverage-W                             ; call subfunction to update leverage
+    ]
+    ask K-firms [
+      SubF-Ask-for-K-Credit-W                            ; check with a K-firm if it needs credit
+    ]
+    ask C-Firms [
+      SubF-Ask-for-C-Credit-W                            ; check with a C-firm if it needs credit
+    ]
+end 
+
+to SubF-Update-Installment-W                                                                              ; subfunction to update the installment wiht the wholesalers bank
+  set  Interest-Pay                     0                                                                 ; reset parameter
+  set  Installment-Pay                  0                                                                 ; reset parameter
+  let  Interest                         0                                                                 ; reset parameter
+  let  Installment                      0                                                                 ; reset parameter
+  if Current-Wholesale-Loan > 0 [                                                                         ; check if this firm already has a loan with this bank
+    ifelse Bank-deposit     >= ((Installment-on-debt-wholesales                 + Interest-Wholesale ) * Current-Wholesale-Loan) [                     ; check if this firm has enough money to pay their debits
+      set Interest-Pay                Interest-Wholesale             * Current-Wholesale-Loan             ; update the parameter
+      set Bank-Deposit                Bank-Deposit                   - interest-pay                       ; updating bank account
+      set Interest                    interest-pay                                                        ; update parameter
+      set Installment-Pay             Installment-on-debt-Wholesales * Current-Wholesale-Loan                ; update parameter
+      set Bank-Deposit                Bank-Deposit                   - Installment-Pay                    ; update bank account
+      set Current-Wholesale-Loan      Current-Wholesale-Loan         - Installment-Pay                    ; reduce the debit after the payment
+      set Installment                 Installment-pay                                                     ;
+      set Wholesale-Bankruptcy        0                                                                   ; means the firm did not went bankruptcy
+      ] [
+    set Wholesale-Bankruptcy          Wholesale-Bankruptcy  +  1                                          ; if the firm did not had money she will be closer and closer to bankruptcy
+      ]
+    ]
+  ask Wholesale-Banks [                                                                                   ; update the wholesalers bank properties
+    set Equity-Total                  Equity-Total     + Installment
+    set Interest-Receive              Interest-Receive + Interest
+    ]
+end 
+
+to SubF-Update-Leverage-W                                                                                 ; subfuntion for update the leverage of firms with the wholesalers bank
+  if Need-Cash > 0                    [ set Leverage                      (Current-Wholesale-Loan + Need-Cash) / (Assets + Current-Wholesale-Loan + Need-Cash)] ;
+  if (Current-Wholesale-Loan = 0)     [ set Leverage 0 ]
+end 
+
+to SubF-Ask-for-K-Credit-W                                                                                ; subfunction used by a K-firms to ask credit with a wholesaler bank
+  let Availible-Credit              Bank-loss-parameter * (sum [Equity-Total] of Wholesale-Banks * B-Lev )  ; check money availible for new loans
+  if (Need-Cash > 0)  and (Availible-Credit > Need-Cash) [                                                ; check if this firm had luck and receive a new loan
+    set Current-Wholesale-Loan       Current-Wholesale-Loan  +  Need-Cash                                 ; creating a new loan
+    set Bank-Deposit                 Bank-Deposit         +  Need-Cash                                    ; update bank account wiht new credit reeceived
+    ifelse Update-Interest?          [ SubF-Update-Interest-Wholesale-K ] [ set Interest-Wholesale              free-interest-rate] ; call subfunction to update the interest rate with the wholesaler bank
+    ]
+end 
+
+to SubF-Ask-for-C-Credit-W                                                                                ; subfunction used by a C-firm to ask for credit with a wholsaler bank
+  let Availible-Credit              Bank-loss-parameter * (sum [Equity-Total] of Wholesale-Banks * B-Lev )  ; check money availible for new loans
+  if (Need-Cash > 0)  and (Availible-Credit > Need-Cash) [                                                ; check if this firm had luck and receive a new loan
+    set Current-Wholesale-Loan       Current-Wholesale-Loan  +  Need-Cash                                 ; creating a loan
+    set Bank-Deposit                 Bank-Deposit            +  Need-Cash                                 ; update bank account wiht new credit reeceived
+    ifelse Update-Interest?          [ SubF-Update-Interest-Wholesale-C ] [ set Interest-Wholesale              free-interest-rate] ; call subfunction to update the interest rate with the wholesaler bank
+    ]
+end 
+
+to SubF-Update-Interest-Wholesale-C                                                                       ; this function update the interest rate of a firm with the wholesaler bank. Similar to the subfunction for the retail bank, check above for details
+  let prob-die                       (1 / (1 + e ^ ( - Beta_1-C-Firms - (Beta_2-C-Firms * leverage))))
+  set T-expected                     (1 / prob-die)
+  let Numerator                      (1 + (free-interest-rate /                         installment-on-debt-wholesales))
+  let Denominator                    ((1 - (1 - installment-on-debt-wholesales) ^ (T-expected + 1)) / installment-on-debt-wholesales)
+  let new-int                        Bank-gross-mark-up    * ((numerator / denominator)  - installment-on-debt-wholesales)
+  set Interest-Wholesale             (Interest-Wholesale   * (Current-Wholesale-Loan - Need-Cash) + new-int * Need-Cash) / Current-Wholesale-Loan
+end 
+
+to SubF-Update-Interest-Wholesale-K                                                                       ; this function update the interest rate of a firm with the wholesaler bank. Similar to the subfunction for the retail bank, check above for details
+  let prob-die                       (1 / (1 + e ^ ( - Beta_1-K-Firms - (Beta_2-K-Firms * leverage))))
+  set T-expected                     (1 / prob-die)
+  let Numerator                      (1 + (free-interest-rate /                         installment-on-debt-Wholesales))
+  let Denominator                    ((1 - (1 - installment-on-debt-wholesales) ^ (T-expected + 1)) / installment-on-debt-Wholesales)
+  let new-int                        Bank-gross-mark-up    * ((numerator / denominator) -  installment-on-debt-Wholesales)
+  set Interest-Wholesale             (Interest-Wholesale   * (Current-Wholesale-Loan - Need-Cash) + new-int * Need-Cash) / Current-Wholesale-Loan
+end 
+
+to SubF-Call-Intrabank                                                                                   ; this subfunction has the process for the intrabank structure
+  let lev                            sum [Current-Wholesale-Loan] of Firms                               ; auxiliar variable with the value of the total wholesaler loans
+  let New-Intra-Loan                 0                                                                   ; local auxiliar variable
+  let Availible-Loan                 0                                                                   ; local auxiliar variable
+  let Installment                    0                                                                   ; local auxiliar variable
+  let Interest                       0                                                                   ; local auxiliar variable
+  let Need-loan                       max list 0 ( Initial-equity-of-the-bank - (abs sum [Intrabank-loan] of Wholesale-Banks) + lev)  ; local variable with the value of the new loans needed for the wholesaler bank
+  if Need-Loan > 0 [                                                                                     ; if the wholesaler bank need more money...
+    ask Retail-Banks [                                                                                   ; ... then ask the retail bank if there is any availible
+      set Availible-Loan             min list Need-Loan (Bank-loss-parameter * Equity-Total * (number-of-consumptions-firms + number-of-capital-goods-firms))       ;  availible credit for this period
+      set Intrabank-Loan             Intrabank-Loan - Availible-Loan                                     ; update the intrabank credit value
+      set Equity-Total               Equity-Total   - Availible-Loan                                     ; update the equity of the retail bank
+      ]
+    ]
+  ask Wholesale-Banks [                                                                                  ; update the parameter of the wholesalers bank after new loans
+    if (Intrabank-Loan > 0) and (Equity-Total > 0) [                                                     ; proceed  with the payment of debits of the Wholesaler bank with the retail bank
+      set Installment                Intrabank-Loan * (Installment-on-debt)                              ; update the installment payed
+      set Interest                   Intrabank-Loan * Intrabank-Rate                                     ; update the interest payed
+      set Equity-Total               Equity-Total   - Installment - Interest                             ; update equity of the wholesaler bank
+      set Intrabank-Loan             Intrabank-Loan - (Intrabank-Loan * Installment-on-debt)             ; update parameter of intrabank loan
+      ]
+    set Equity-Total                 Equity-total   + Availible-Loan                                     ; this is called even when there was not previous intrabank credit
+    set Intrabank-Loan               Intrabank-Loan + Availible-Loan                                     ; this is called even when there was not previous intrabank credit
+    if Equity-total < 0 [ set Equity-total Initial-equity-of-the-bank]                                   ; bank bankruptcy, recapitalized
+    ]
+  ask Retail-Banks [                                                                                     ; update the retail bank properties using the local auxiliar variables
+    set Equity-Total                 Equity-Total   + Installment + Interest
+    set Intrabank-Loan               Intrabank-Loan + Installment
+    ]
+end 
+
+
+
+
+;*************************************************************************************Function-Call-Central-Bank*************************************************************************************************
+
+to Function-Call-Central-Bank
+  ;Taylor-rule-parameter-for-product
+  ;Taylor-rule-parameter-for-inflation
+  ;Desire-inflation-for-the-monetary-authority
+  ;Natural-interest-rate
+  let pi_t                          ((ln Goods-Price-Level - ln Goods-Price-Level_t-1) + (ln Capital-Price-Level - ln Capital-Price-Level_t-1))
+  let P_gdp                         Productivity-of-capital * sum [Capital] of C-Firms
+  let sensity_inflation             Taylor-rule-parameter-for-inflation * (pi_t - Desire-inflation-for-the-monetary-authority)
+  let sensity_product               Taylor-rule-parameter-for-product   * (ln GDP - ln P_gdp)
+  set Free-Interest-Rate            max list 0.01 ( (pi_t + natural-interest-rate + sensity_inflation + sensity_product) * (Slow_taylor) + (1 - slow_taylor) * Free-Interest-Rate )
+end 
+
